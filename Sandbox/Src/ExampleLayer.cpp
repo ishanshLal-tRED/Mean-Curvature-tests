@@ -123,8 +123,6 @@ void ExampleLayer::OnUpdate(Timestep ts)
 	glUseProgram (m_SquareShaderProgID); // You can find shader inside base.cpp as a static c_str
 	glm::mat4 viewProjMat = m_Camera.GetProjection ()*m_Camera.GetView ();
 	glUniformMatrix4fv (m_Uniform.Mat4_ViewProjection, 1, GL_FALSE, glm::value_ptr (viewProjMat));
-	static glm::mat4 modelMatrix = glm::scale (glm::mat4 (1.0f), glm::vec3 (3));
-	glUniformMatrix4fv (m_Uniform.Mat4_ModelMatrix, 1, GL_FALSE, glm::value_ptr (modelMatrix));
 
 	glBindVertexArray (m_MeshVA);
 	glEnableVertexAttribArray (0);
@@ -146,19 +144,18 @@ void ExampleLayer::OnImGuiRender()
 			if(ImGui::DragFloat ("Near plane", &m_Camera.Near, 1.0, 0.01f) ||
 			ImGui::DragFloat ("Far  plane", &m_Camera.Far, 1.0, m_Camera.Near, 10000))
 				m_Camera.ReCalculateProjection (1);
-			if(ImGui::Button ("CamUpdateTransform"))
-				m_Camera.ReCalculateTransform ();
-			ImGui::SameLine ();
-			if(ImGui::Button ("CamUpdateProjection"))
-				m_Camera.ReCalculateProjection (1);
-			ImGui::Text ("Note:\n For some reason parsed models 1st mesh is the only one being loaded, this is 1st for me so probably a tiny mistake on my side.\nI'll Address the issue on a later date. :)");
-			ImGui::EndTabItem ();
+			//if(ImGui::Button ("CamUpdateTransform"))
+			//	m_Camera.ReCalculateTransform ();
+			//ImGui::SameLine ();
+			//if(ImGui::Button ("CamUpdateProjection"))
+			//	m_Camera.ReCalculateProjection (1);
+			//ImGui::Text ("Note:\n For some reason parsed models 1st mesh is the only one being loaded, this is 1st for me so probably a tiny mistake on my side.\nI'll Address the issue on a later date. :)");
 
 			if (ImGui::Button ("Calculate mean curvature")) {
 				uint32_t i = m_LoadedMeshPath.size ();
 				while (i > 0 && m_LoadedMeshPath[i-1] == '/' && m_LoadedMeshPath[i-1] == '\\')
 					i--;
-				if (MeanCurvatureCalculate (&m_LoadedMeshPath[i], m_StaticMeshData, m_MeshIndicesData, m_MeshColorData) && m_MeshCVB) {
+				if (MeanCurvatureCalculate (&m_LoadedMeshPath[i], m_StaticMeshData, m_MeshIndicesData, m_MeshColorData, false) && m_MeshCVB) {
 					glBindBuffer (GL_ARRAY_BUFFER, m_MeshCVB);
 					glBufferSubData (GL_ARRAY_BUFFER, 0, m_MeshColorData.size ()*sizeof (glm::vec3), m_MeshColorData.data ());
 				}
@@ -173,6 +170,8 @@ void ExampleLayer::OnImGuiRender()
 						m_LoadedMeshPath = std::move(temp);
 				}
 			}
+
+			ImGui::EndTabItem ();
 		}
 		if (ImGui::BeginTabItem (GLCore::ImGuiLayer::UniqueName ("Square Shader Source"))) {
 
@@ -199,6 +198,10 @@ void ExampleLayer::OnSquareShaderReload ()
 {
 	m_Uniform.Mat4_ViewProjection = glGetUniformLocation (m_SquareShaderProgID, ViewProjectionIdentifierInShader);
 	m_Uniform.Mat4_ModelMatrix    = glGetUniformLocation (m_SquareShaderProgID, ModelMatrixIdentifierInShader);
+
+	glUseProgram (m_SquareShaderProgID); // You can find shader inside base.cpp as a static c_str
+	glm::mat4 modelMatrix = glm::mat4 (1.0f);
+	glUniformMatrix4fv (m_Uniform.Mat4_ModelMatrix, 1, GL_FALSE, glm::value_ptr (modelMatrix));
 }
 
 
@@ -271,9 +274,9 @@ bool MeanCurvatureCalculate (const char* debug_filename, const std::vector<std::
 	float min_curvature =  std::numeric_limits<float>::max ();
 
 	std::vector<glm::vec3> array_K_Xi;
-	array_K_Xi.reserve (posn_and_normals.size ());
+	array_K_Xi.resize (posn_and_normals.size ());
 	std::vector<float> array_K_h; // mean curvature value
-	array_K_h.reserve (posn_and_normals.size ());
+	array_K_h.resize (posn_and_normals.size ());
 
 #if MODE_DEBUG
 	const char *fn = debug_filename != nullptr ? debug_filename : "curvatureResults.txt";
@@ -285,28 +288,29 @@ bool MeanCurvatureCalculate (const char* debug_filename, const std::vector<std::
 	std::mutex mutex_ofs;
 #endif
 
-	std::mutex mutex_curvature_push, mutex_cout, sync_lock;
-	std::condition_variable barrier;
+	std::mutex mutex_curvature_push, mutex_cout, sync_lock, another_sync_lock;
+	std::condition_variable barrier; std::unique_lock synced_lock (sync_lock);
+	bool first_to_reach_access_it = true;
 
 	std::atomic<size_t> vertices_processed = 0;
 	if (trackOutput)
 		std::cout << "index | A_mixed    |    curvature Kh    |    K(Xi)\n";
 	auto mean_curvature_func = [&](const uint32_t start, const uint32_t stride) {
 
+	std::ostringstream cout_stream;
 	#if MODE_DEBUG
 		std::ostringstream out_stream;
 		out_stream << std::fixed << std::setprecision (8);
 	#endif
 
-		for (size_t curr_indice = start; curr_indice < posn_and_normals.size (); curr_indice += stride) // repeat for every vertex
+		for (size_t curr_indice = start; curr_indice < posn_and_normals.size (); curr_indice += stride, vertices_processed++) // repeat for every vertex
 		{
 			if (!trackOutput && curr_indice % (stride+1) == 0) {
 				mutex_cout.lock ();
 				std::cout << "\r  vertices_processed: " << vertices_processed << " out_of: " << posn_and_normals.size ();
 				mutex_cout.unlock ();
 			}
-			vertices_processed++;
-
+			
 		#if MODE_DEBUG
 			out_stream << "\nIDX: " << curr_indice << '\n';
 		#endif
@@ -414,53 +418,55 @@ bool MeanCurvatureCalculate (const char* debug_filename, const std::vector<std::
 				K_Xi = (sigma_mean_curvature_normal_operator)*float (1.0/(2.0*A_mixed));
 
 				if (trackOutput) {
-					mutex_cout.lock ();
-					std::cout << std::setw (4) << curr_indice << ' ' << A_mixed << ' ';
-					mutex_cout.unlock ();
+					cout_stream << std::setw (4) << curr_indice << ' ' << A_mixed << ' ';
 				}
 			#if MODE_DEBUG
 				out_stream << "A_mixed: " << A_mixed;
 			#endif
 			}
 			mutex_curvature_push.lock ();
-			array_K_Xi.push_back (K_Xi);
+			array_K_Xi[curr_indice] = K_Xi;
 			float K_h = glm::length (K_Xi)*0.5;
-			array_K_h.push_back (K_h);
+			array_K_h[curr_indice] = K_h;
 			max_curvature = MAX (K_h, max_curvature);
 			min_curvature = MIN (K_h, min_curvature);
-			if (trackOutput) {
-				//mutex_cout.lock ();
-				std::cout << K_h << ' ' << K_Xi << '\n';
-				//mutex_cout.unlock ();
-			}
+			if (trackOutput)
+				cout_stream << K_h << ' ' << K_Xi << '\n';
 			mutex_curvature_push.unlock ();
 
 		#if MODE_DEBUG
 			out_stream << " mean_curvature: " << K_h << " K(Xi) " << K_Xi << "\ncurrvertex: " << posn_and_normals[curr_indice].first << " normal: " << posn_and_normals[curr_indice].second << '\n';
 		#endif
 		}
-
-
-		// Sync threads
-		__debugbreak ();
-		std::unique_lock ul(sync_lock);
-		if (vertices_processed == posn_and_normals.size ())
+		{ // brain blown away
 			barrier.notify_all ();
-		else barrier.wait (ul);
+			another_sync_lock.lock ();
+			if (vertices_processed < posn_and_normals.size ()) { // not changing the owner thread, other threads skips it
+				barrier.wait (synced_lock, [&] { return vertices_processed >= posn_and_normals.size (); });
+				if(!trackOutput)
+					std::cout << "\r  vertices_processed: " << vertices_processed << " out_of: " << posn_and_normals.size () << '\n';
+				else
+					std::cout << "\nresulting mean_curvatures{max: " << max_curvature << ", min: " << min_curvature << "}\n\n";
+				synced_lock.unlock ();
+			}
+			std::cout << cout_stream.str ();
+			another_sync_lock.unlock ();
+		}
 
 		float min_max_curvature_diff = (max_curvature - min_curvature);
-
 	#if MODE_DEBUG
-		if (start == 0) { // only 1st one is allowed to write
-			ofs << "mean_curvatures{max: " << max_curvature << ", min: " << min_curvature << "}\n\n";
-			std::cout << "\nresulting mean_curvatures{max: " << max_curvature << ", min: " << min_curvature << "}\n\n";
-		} else barrier.wait (ul);
-		barrier.notify_all ();
 
 		mutex_ofs.lock ();
+		if (first_to_reach_access_it) {
+			ofs << "mean_curvatures{max: " << max_curvature << ", min: " << min_curvature << "}\n\n";
+			first_to_reach_access_it = false;
+		}
 		ofs << out_stream.str ();
 		mutex_ofs.unlock ();
 	#endif
+		//mutex_cout.lock ();
+		//mutex_cout.unlock ();
+		
 		//for (size_t i = start; i < array_K_Xi.size (); i += stride) {
 		//	curvature_diffuse_color[i] = -glm::normalize(array_K_Xi[i]);
 		//}
@@ -476,27 +482,30 @@ bool MeanCurvatureCalculate (const char* debug_filename, const std::vector<std::
 			float curvature = array_K_h[i];
 			curvature -= min_curvature;
 			curvature /= min_max_curvature_diff;
-		
-			curvature_diffuse_color[i] = blend (curvature, { 
+
+			curvature_diffuse_color[i] = blend (curvature, {
 												glm::vec3{0,0,85},
 												glm::vec3{0.0f,0.15f,0.65f},
 												glm::vec3{0.15f,0.25f,0.55f},
 												glm::vec3{0.15f,0.55f,0.05f},
 												glm::vec3{0.65f,0.35f,0},
-												glm::vec3{0.85f,0.15f,0}, 
-												glm::vec3{1.0f,0,0} 
+												glm::vec3{0.85f,0.15f,0},
+												glm::vec3{1.0f,0,0}
 												});
-		}
+		};
 	};
-	//std::vector<std::thread> threads;
-	//threads.reserve (std::thread::hardware_concurrency () - 1);
-	//for (uint32_t i = 1; i < std::thread::hardware_concurrency (); i++)
-	//	threads.emplace_back (std::move (std::thread (mean_curvature_func, i, std::thread::hardware_concurrency ())));
-	mean_curvature_func (0, 1);// std::thread::hardware_concurrency ());
-	//for (auto &ref : threads)
-	//	ref.join ();
-
-	std::cout << "max_curvature: " << max_curvature << "  min_curvature: " << min_curvature << '\n' << '\n';
+#define USE_MT 1
+#if USE_MT
+	std::vector<std::thread> threads;
+	threads.reserve (std::thread::hardware_concurrency () - 1);
+	for (uint32_t i = 1; i < std::thread::hardware_concurrency (); i++)
+		threads.push_back (std::thread (mean_curvature_func, i, std::thread::hardware_concurrency ()));
+	mean_curvature_func (0, std::thread::hardware_concurrency ());
+	for (std::thread &ref : threads)
+		ref.join ();
+#else
+	mean_curvature_func (0, 1);
+#endif
 #if MODE_DEBUG
 	ofs.close ();
 #endif

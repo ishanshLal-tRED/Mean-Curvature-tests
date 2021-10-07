@@ -847,7 +847,7 @@ namespace Helper
 			if (!raw_OBJ_loader (path, temp_vertices, temp_uvs, temp_normals, vertexIndices, uvIndices, normalIndices))
 				return false;
 			out_vertices.clear ();
-			out_vertices.resize (vertexIndices.size ());
+			out_vertices.resize (temp_vertices.size ());
 			for (size_t i = 0; i < vertexIndices.size (); i++) {
 				// this is quite waste of computation
 				// There's a near 100% chance that every vertIndex,nrmlIndex are twins across primitives
