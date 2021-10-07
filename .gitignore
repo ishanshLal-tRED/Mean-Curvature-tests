@@ -1,0 +1,22 @@
+#builds
+builds/*
+**bin/
+**bin-int/
+
+# Files
+*.user
+*imgui.ini
+
+# Visual-Studio
+.vs/
+.vscode/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+
+Sandbox/assets/*.*
+Sandbox/*.txt
+~vendor/*/premake5.lua
+~vendor/*/doc/*
+~vendor/*/docs/*

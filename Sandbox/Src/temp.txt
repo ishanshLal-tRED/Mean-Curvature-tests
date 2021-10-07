@@ -1,0 +1,124 @@
+﻿#include "ExampleLayer.h"
+#include "Compute-Shader/02_Evolving_Pics/APT.h"
+#include <iomanip>
+
+using namespace GLCore;
+using namespace GLCore::Utils;
+
+std::ostream &operator<<(std::ostream &cout, const glm::mat4 &matrix)
+{
+	cout << std::setprecision (8) << std::fixed;
+	for (uint32_t i = 0; i < 4; i++) {
+		for (uint32_t j = 0; j < 4; j++) {
+			cout  << ' ' << std::setw (8) << matrix[i][j];
+		}
+		cout << '\n';
+	}
+	return cout;
+}
+ExampleLayer::ExampleLayer (std::string name)
+	: TestBase (name, "Just a Square")
+{
+	m_Camera.ReCalculateProjection (1.5f);
+	m_Camera.ReCalculateTransform ();
+}
+
+// Static data begin
+constexpr uint32_t VertexBatchSize = 128*128*4;
+static const float BasicQuadVertices[] = {
+		-0.5f, -0.5f, 0.0f,
+		 0.5f, -0.5f, 0.0f,
+		 0.5f,  0.5f, 0.0f,
+		-0.5f,  0.5f, 0.0f
+};
+const char *ViewProjectionIdentifierInShader = "u_ViewProjectionMat4";
+// Static data end
+
+namespace helper
+{
+	void BeginBatching (GLuint shader, GLuint viewProjectionLocation, const glm::mat4 &cameraProjection, const glm::mat4 &cameraTransform)
+	{
+		glm::mat4 viewProjectionMat = cameraProjection * glm::inverse (cameraTransform);
+
+		glUseProgram (shader);
+		glUniformMatrix4fv (viewProjectionLocation, 1, GL_FALSE, glm::value_ptr (viewProjectionMat));
+	};
+}
+
+void ExampleLayer::OnAttach ()
+{
+	EnableGLDebugging ();
+
+	glEnable (GL_DEPTH_TEST);
+	glEnable (GL_BLEND);
+	glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+	// Done
+	{
+		glGenVertexArrays (1, &m_QuadVA);
+		glBindVertexArray (m_QuadVA);
+
+		glGenBuffers (1, &m_QuadVB);
+		glBindBuffer (GL_ARRAY_BUFFER, m_QuadVB);
+		glBufferData (GL_ARRAY_BUFFER, sizeof (BasicQuadVertices), NULL, GL_STATIC_DRAW);
+
+		glEnableVertexAttribArray (0);
+		glVertexAttribPointer (0, 3, GL_FLOAT, GL_FALSE, sizeof (float) * 3, 0);
+
+		uint32_t indices[] = { 0, 1, 2, 2, 3, 0 };
+		glGenBuffers (1, &m_QuadIB);
+		glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, m_QuadIB);
+		glBufferData (GL_ELEMENT_ARRAY_BUFFER, sizeof (indices), indices, GL_STATIC_DRAW);
+	}
+}
+void ExampleLayer::OnDetach ()
+{
+	glDeleteVertexArrays (1, &m_QuadVA);
+	glDeleteBuffers (1, &m_QuadVB);
+	glDeleteBuffers (1, &m_QuadIB);
+}
+
+bool showDemoQuad = 0;
+void ExampleLayer::OnUpdate (Timestep ts)
+{
+	glClearColor (0.1f, 0.1f, 0.1f, 1.0f);
+	glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	//m_Camera.LookAt (glm::vec3 (0));
+	m_Camera.ReCalculateTransform ();
+	helper::BeginBatching (m_SquareShaderProgID, m_Uniform.Mat4_ViewProjection, m_Camera.GetProjection (), m_Camera.GetTransform ());
+	//for(uint32_t i = 0; i < 4; i++)
+	//	m_MeshBuff.push_back (Vertex{ { BasicQuadVertices[i*3 + 0], BasicQuadVertices[i*3 + 1], BasicQuadVertices[i*3 + 2] } });
+	//helper::Flush (m_MeshBuff, m_CurvatureVA, m_CurvatureVB);
+
+	if (showDemoQuad) {
+		glBindVertexArray (m_QuadVA);
+		glBindBuffer (GL_ARRAY_BUFFER, m_QuadVB);
+		// (GLenum target, GLintptr offset, GLsizeiptr size, const void *data);
+		glBufferSubData (GL_ARRAY_BUFFER, 0, sizeof (BasicQuadVertices), &BasicQuadVertices[0]);
+		glDrawElements (GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+	}
+}
+std::array<int, 10> just_an_arr = my_std::make_array<10> (23);
+void ExampleLayer::OnImGuiRender ()
+{
+	ImGui::Begin (ImGuiLayer::UniqueName ("Controls"));
+	ImGui::DragFloat3 ("Cam Position", &m_Camera.Position[0]);
+	ImGui::DragFloat3 ("Cam Rotation", &m_Camera.Rotation[0]);
+	if (ImGui::Button ("CamUpdateTransform"))
+		m_Camera.ReCalculateTransform ();
+	if (ImGui::Checkbox ("Show Demo quad", &showDemoQuad));
+	ImGui::End ();
+}
+
+void ExampleLayer::OnEvent (Event &event)
+{
+	//EventDispatcher dispatcher(event);
+}
+void ExampleLayer::ImGuiMenuOptions ()
+{
+	//
+}
+void ExampleLayer::OnSquareShaderReload ()
+{
+	m_Uniform.Mat4_ViewProjection = glGetUniformLocation (m_SquareShaderProgID, ViewProjectionIdentifierInShader);
+}
