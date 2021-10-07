@@ -5,11 +5,12 @@ This is my exercise on Mean curvature, based on paper
 Discrete Differential-Geometry Operators for Triangulated 2-Manifolds
 by Mark Meyer, Mathieu Desbrun, Peter Schr¨oder, and Alan H. Barr1
 ```
-![image](https://user-images.githubusercontent.com/61790879/136378501-8e0b851e-6f46-4781-a4cc-5aa86604d594.png)
+![image](https://user-images.githubusercontent.com/61790879/136462536-02707929-d209-42a6-812a-742adca020cf.png)
+
 (i know it looks awful, but its actually correct (calculations are correct though), UI will be changed soon, and bugs will be captured)
 # 2. How to use
 
-## 2.0.1 Dependencies
+## 2.0.1 Dependencies (Included)
 
 - Glad (OpenGL version 4.4 +) > https://glad.dav1d.de/
 - glfw > https://github.com/glfw/glfw
