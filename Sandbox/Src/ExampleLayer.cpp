@@ -93,7 +93,7 @@ void ExampleLayer::OnAttach()
 	ReloadSquareShader ();
 
 	if (m_LoadedMeshPath.empty ()) {
-		std::string filepath = "./assets/Base Mesh sculpt 2.obj";
+		std::string filepath = "./assets/torus.obj";
 		m_LoadedMeshPath = filepath;
 		if (!LoadModel (std::move (filepath))) {
 			LOG_ERROR ("Cannot Load Mesh");
@@ -419,7 +419,7 @@ bool MeanCurvatureCalculate (const std::vector<std::pair<glm::vec3, glm::vec3>> 
 				curvature -= 1.0;
 				curvature_diffuse_color[i] = glm::vec3 (1.0 - curvature, curvature, 0);
 			} else {
-				curvature_diffuse_color[i] = glm::vec3 (0, 1.0 - curvature, curvature);
+				curvature_diffuse_color[i] = glm::vec3 (0, curvature, 1.0 - curvature);
 			}
 		}
 	};
@@ -457,7 +457,7 @@ bool MeanCurvature2Calculate (const std::vector<std::pair<glm::vec3, glm::vec3>>
 	std::mutex mutex_curvature_push, mutex_cout;
 	std::atomic<size_t> vertices_processed = 0;
 
-
+	std::cout << "index | A_mixed    |    curvature Kh    |    K(Xi)\n";
 	auto mean_curvature_func = [&](uint32_t start, uint32_t stride) {
 
 	#if MODE_DEBUG
@@ -467,10 +467,10 @@ bool MeanCurvature2Calculate (const std::vector<std::pair<glm::vec3, glm::vec3>>
 
 		for (size_t curr_indice = start; curr_indice < posn_and_normals.size (); curr_indice += stride) // repeat for every vertex
 		{
-			mutex_cout.lock ();
-			std::cout << "\r  vertices_processed: " << vertices_processed << " out_of: " << posn_and_normals.size ();
-			vertices_processed++;
-			mutex_cout.unlock ();
+			//mutex_cout.lock ();
+			//std::cout << "\r  vertices_processed: " << vertices_processed << " out_of: " << posn_and_normals.size ();
+			//vertices_processed++;
+			//mutex_cout.unlock ();
 
 			glm::vec3 K_Xi = glm::vec3 (0);
 			{
@@ -536,50 +536,39 @@ bool MeanCurvature2Calculate (const std::vector<std::pair<glm::vec3, glm::vec3>>
 				//     /  \
 				//   Q/____\R
 				float A_mixed = 0;
-				std::vector<float> aij_bij;
-				aij_bij.reserve (ring.size ()*2 - 3);
+				glm::vec3 sigma_mean_curvature_normal_operator = glm::vec3(0);
 				for (uint32_t i = 1; i < ring.size (); i++) {
 					float Q = angle_between_edges (ring[i-1], ring[i], curr_indice)
 						, R = angle_between_edges (ring[i], curr_indice, ring[i-1])
 						, X = angle_between_edges (curr_indice, ring[i], ring[i-1]);
-					float XR2_cot_Q, XQ2_cot_R;
-					{
-						glm::vec3 XR_diff = posn_and_normals[curr_indice].first - posn_and_normals[ring[i-1]].first
-							, XQ_diff = posn_and_normals[curr_indice].first - posn_and_normals[ring[i]].first;
-						float XR2 = glm::length2 (XR_diff), XQ2 = glm::length2 (XQ_diff), cot_Q, cot_R;
-
-						XR2_cot_Q = XR2*cotf (Q), XQ2_cot_R = XR2*cotf (R);
+					float pXR2, pXQ2, cot_Q, cot_R;
+					glm::vec3 XR_diff, XQ_diff; {
+						XR_diff = posn_and_normals[curr_indice].first - posn_and_normals[ring[i-1]].first;
+						XQ_diff = posn_and_normals[curr_indice].first - posn_and_normals[ring[i]].first;
+						cot_Q = cotf (Q), cot_R = cotf (R);
+						pXR2 = glm::length2 (XR_diff), pXQ2 = glm::length2 (XQ_diff), cot_Q, cot_R;
 					}
 
 					if (Q < glm::half_pi<float> () && R < glm::half_pi<float> () && X < glm::half_pi<float> ()) { // Acute △
-						float A_voronoi = (XR2_cot_Q + XQ2_cot_R)*0.125; // (1/8)*((X-R)^2 * cotf(∠Q)  +  (X-Q)^2 * cotf(∠R))
+						float A_voronoi = (pXR2*cot_Q + pXQ2*cot_R)*0.125; // (1/8)*((X-R)^2 * cotf(∠Q)  +  (X-Q)^2 * cotf(∠R))
 						A_mixed += A_voronoi;
 					} else {
-						float Area_T = (XR2_cot_Q/sqr (sinf (R)) + XQ2_cot_R/sqr (sinf (Q)))*0.5;
+						float Area_T = (pXR2*cot_Q/sqr (sinf (R)) + pXQ2*cot_R/sqr (sinf (Q)))*0.5;
 						if (X >= glm::half_pi<float> ())
 							A_mixed += Area_T*0.5;
 						else
 							A_mixed += Area_T*0.25;
 					}
 
-					if (!aij_bij.empty ()) {
-						aij_bij.push_back (R);
-						aij_bij.push_back (Q);
-					} else aij_bij.push_back (Q);
+					glm::vec3 mean_curvature_normal_operator_for_curr_tri
+						= cot_Q*XR_diff +  cot_R*XQ_diff;
+					sigma_mean_curvature_normal_operator += mean_curvature_normal_operator_for_curr_tri;
 				}
-				aij_bij.pop_back (); // last one is not part of pairs
-				// final size() = ring.size ()*2 - 4
-				for (float &val: aij_bij)
-					val = cotf (val);
-				glm::vec3 sigma_j_in_ring = glm::vec3 (0.0f);
-				for (uint32_t i = 1, __nringsize = ring.size () - 1; i < __nringsize; i++) {
-					uint32_t idx = ((i - 1) << 1); // (i - 1)*2
-					float cot_aij = aij_bij[idx];
-					float cot_bij = aij_bij[idx+1];
-				glm::vec3 edge = posn_and_normals[curr_indice].first - posn_and_normals[ring[i]].first;
-					sigma_j_in_ring += edge*(cot_aij + cot_bij);
-				}
-				K_Xi = (sigma_j_in_ring/A_mixed)*0.5f;
+				K_Xi = (sigma_mean_curvature_normal_operator)*float(1.0/(2.0*A_mixed));
+
+				mutex_cout.lock ();
+				std::cout << std::setw (4) << curr_indice << ' ' << A_mixed << ' ' << glm::length (K_Xi)*0.5  << ' '<< K_Xi << '\n';
+				mutex_cout.unlock ();
 			}
 			mutex_curvature_push.lock ();
 			array_K_Xi.push_back (K_Xi);
@@ -591,39 +580,51 @@ bool MeanCurvature2Calculate (const std::vector<std::pair<glm::vec3, glm::vec3>>
 
 		#if MODE_DEBUG
 			out_stream << " idx: " << curr_indice << " mean_curvature_val: " << K_h << " Mean Curvature Norml: " << K_Xi << '\n';
-			out_stream << "currvertex: " << posn_and_normals[curr_indice].first << '\n' << '\n';
+			out_stream << "currvertex: " << posn_and_normals[curr_indice].first << " normal: " << posn_and_normals[curr_indice].second << '\n' << '\n';
 		#endif
 		}
-		float min_max_curvature_diff_by_2 = (max_curvature - min_curvature)*0.5;
+		float min_max_curvature_diff = (max_curvature - min_curvature);
 	#if MODE_DEBUG
 		mutex_ofs.lock ();
-		std::cout << '\n';
 		ofs << out_stream.str ();
 		mutex_ofs.unlock ();
 	#endif
 		//for (size_t i = start; i < array_K_Xi.size (); i += stride) {
-		//	curvature_diffuse_color[i] = array_K_Xi[i];
+		//	curvature_diffuse_color[i] = -glm::normalize(array_K_Xi[i]);
 		//}
+		auto blend = [](float ratio, std::array<glm::vec3, 7> blend_between) -> glm::vec3 {
+			ratio *= (blend_between.size () - 1);
+			float low_contri = std::floor (ratio);
+			float high_contri = std::ceil (ratio);
+			int low = low_contri;
+			int high = high_contri;
+			return low_contri*blend_between[low] + high_contri*blend_between[high];
+		};
 		for (size_t i = start; i < array_K_Xi.size (); i += stride) {
 			float curvature = array_K_h[i];
 			curvature -= min_curvature;
-			curvature /= min_max_curvature_diff_by_2;
-
-			if (curvature > 1.0) {
-				curvature -= 1.0;
-				curvature_diffuse_color[i] = glm::vec3 (1.0 - curvature, curvature, 0);
-			} else {
-				curvature_diffuse_color[i] = glm::vec3 (0, 1.0 - curvature, curvature);
-			}
+			curvature /= min_max_curvature_diff;
+		
+			curvature_diffuse_color[i] = blend (curvature, { 
+												glm::vec3{0,0,85},
+												glm::vec3{0.0f,0.15f,0.65f},
+												glm::vec3{0.15f,0.25f,0.55f},
+												glm::vec3{0.15f,0.55f,0.05f},
+												glm::vec3{0.65f,0.35f,0},
+												glm::vec3{0.85f,0.15f,0}, 
+												glm::vec3{1.0f,0,0} 
+												});
 		}
 	};
-	std::vector<std::thread> threads;
-	threads.reserve (std::thread::hardware_concurrency () - 1);
-	for (uint32_t i = 1; i < std::thread::hardware_concurrency (); i++)
-		threads.emplace_back (std::move (std::thread (mean_curvature_func, i, std::thread::hardware_concurrency ())));
-	mean_curvature_func (0, std::thread::hardware_concurrency ());
-	for (auto &ref : threads)
-		ref.join ();
+	//std::vector<std::thread> threads;
+	//threads.reserve (std::thread::hardware_concurrency () - 1);
+	//for (uint32_t i = 1; i < std::thread::hardware_concurrency (); i++)
+	//	threads.emplace_back (std::move (std::thread (mean_curvature_func, i, std::thread::hardware_concurrency ())));
+	mean_curvature_func (0, 1);// std::thread::hardware_concurrency ());
+	//for (auto &ref : threads)
+	//	ref.join ();
+
+	std::cout << "max_curvature: " << max_curvature << "  min_curvature: " << min_curvature << '\n' << '\n';
 #if MODE_DEBUG
 	ofs.close ();
 #endif
