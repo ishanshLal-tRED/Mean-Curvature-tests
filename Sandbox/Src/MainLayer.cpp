@@ -1,4 +1,4 @@
-﻿#include "ExampleLayer.h"
+﻿#include "MainLayer.h"
 #include "mean_curvature.h"
 #include <iomanip>
 #include <string>
@@ -13,7 +13,7 @@ const char *ViewProjectionIdentifierInShader = "u_ViewProjectionMat4";
 const char *ModelMatrixIdentifierInShader = "u_ModelMat4";
 // Static data end
 
-bool ExampleLayer::load_model (std::string filePath){
+bool MainLayer::load_model (std::string filePath){
 	std::vector<std::pair<glm::vec3, glm::vec3>> meshVertices;
 	std::vector<uint32_t> meshIndices;
 	bool meshloaded = Helper::ASSET_LOADER::LoadOBJ_meshOnly(filePath.c_str (), meshVertices, meshIndices);
@@ -78,7 +78,7 @@ bool ExampleLayer::load_model (std::string filePath){
 	}
 	return meshloaded;
 }
-void ExampleLayer::calculate_my_curvature ()
+void MainLayer::calculate_my_curvature ()
 {
 	uint32_t i = m_LoadedMeshPath.size ();
 	while (i > 0 && m_LoadedMeshPath[i-1] == '/' && m_LoadedMeshPath[i-1] == '\\')
@@ -91,7 +91,7 @@ void ExampleLayer::calculate_my_curvature ()
 		glBufferSubData (GL_ARRAY_BUFFER, 0, m_MeshColorData.size ()*sizeof (glm::vec3), m_MeshColorData.data ());
 	}
 }
-void ExampleLayer::OnAttach()
+void MainLayer::OnAttach()
 {
 	EnableGLDebugging();
 	//m_Camera.Position = { 0,0,16 };
@@ -111,7 +111,7 @@ void ExampleLayer::OnAttach()
 	}
 	m_Camera.ReCalculateProjection (This_ViewportAspectRatio());
 }
-void ExampleLayer::OnDetach()
+void MainLayer::OnDetach()
 {
 	if (m_MeshVA)
 		glDeleteVertexArrays (1, &m_MeshVA);
@@ -124,7 +124,7 @@ void ExampleLayer::OnDetach()
 
 	DeleteSquareShader ();
 }
-void ExampleLayer::OnUpdate(Timestep ts)
+void MainLayer::OnUpdate(Timestep ts)
 {
 	m_Camera.Update ();
 
@@ -142,7 +142,7 @@ void ExampleLayer::OnUpdate(Timestep ts)
 	glDrawElements (GL_TRIANGLES, m_MeshIndicesData.size (), GL_UNSIGNED_INT, nullptr);
 }
 std::array<int, 10> just_an_arr = my_std::make_array<10> (23);
-void ExampleLayer::OnImGuiRender()
+void MainLayer::OnImGuiRender()
 {
 	auto Tooltip = [](const char *display_me) {
 		if (ImGui::IsItemHovered ()) {
@@ -227,7 +227,7 @@ void ExampleLayer::OnImGuiRender()
 	ImGui::End();
 }
 
-void ExampleLayer::OnEvent(Event& event)
+void MainLayer::OnEvent(Event& event)
 {
 	EventDispatcher dispatcher(event);
 	dispatcher.Dispatch<LayerViewportResizeEvent> (
@@ -288,11 +288,11 @@ void ExampleLayer::OnEvent(Event& event)
 			return false;
 		});
 }
-void ExampleLayer::ImGuiMenuOptions ()
+void MainLayer::ImGuiMenuOptions ()
 {
 	//
 }
-void ExampleLayer::OnSquareShaderReload ()
+void MainLayer::OnSquareShaderReload ()
 {
 	m_Uniform.Mat4_ViewProjection = glGetUniformLocation (m_SquareShaderProgID, ViewProjectionIdentifierInShader);
 	m_Uniform.Mat4_ModelMatrix    = glGetUniformLocation (m_SquareShaderProgID, ModelMatrixIdentifierInShader);
@@ -305,14 +305,14 @@ void ExampleLayer::OnSquareShaderReload ()
 
 /////////////////
 // Camera
-void ExampleLayer::Camera::Update ()
+void MainLayer::Camera::Update ()
 {
 	if (m_Dirty) {
 		re_calculate_transform ();
 	}
 	m_Dirty = false;
 }
-const glm::mat4 ExampleLayer::Camera::GetTransform ()
+const glm::mat4 MainLayer::Camera::GetTransform ()
 {
 	glm::mat4 matrix = m_RotationMatrix;
 	for (uint16_t i = 0; i < 3; i++) {
@@ -320,22 +320,22 @@ const glm::mat4 ExampleLayer::Camera::GetTransform ()
 	}
 	return matrix;
 }
-const glm::mat4 ExampleLayer::Camera::GetView ()
+const glm::mat4 MainLayer::Camera::GetView ()
 {
 	glm::mat4 matrix = glm::transpose (m_RotationMatrix); // orthogonal
 	matrix = glm::translate (matrix, -Position);
 	//matrix = glm::inverse (GetTransform ());
 	return matrix;
 }
-const glm::mat4 &ExampleLayer::Camera::GetProjection ()
+const glm::mat4 &MainLayer::Camera::GetProjection ()
 {
 	return m_Projection;
 }
-void ExampleLayer::Camera::ReCalculateProjection (float aspectRatio)
+void MainLayer::Camera::ReCalculateProjection (float aspectRatio)
 {
 	m_Projection = glm::perspective (glm::radians (FOV_y), aspectRatio, Near, Far);
 }
-void ExampleLayer::Camera::re_calculate_transform ()
+void MainLayer::Camera::re_calculate_transform ()
 {
 	m_RotationMatrix =
 		glm::rotate (
@@ -346,7 +346,7 @@ void ExampleLayer::Camera::re_calculate_transform ()
 			,glm::radians (Rotation.x), { 1,0,0 })
 		,glm::radians (Rotation.z), { 0,0,1 });
 }
-void ExampleLayer::Camera::LookAt (glm::vec3 positionInSpace)
+void MainLayer::Camera::LookAt (glm::vec3 positionInSpace)
 {
 	glm::vec3 dirn (glm::normalize (positionInSpace - Position));
 	glm::vec2 angl = PitchYawFromDirn (-dirn); //Inverting The Model Matrix Flipps the dirn of forward, so flipping the dirn to the trouble of flipping pitch yaw
@@ -354,7 +354,7 @@ void ExampleLayer::Camera::LookAt (glm::vec3 positionInSpace)
 	Rotation = glm::degrees(eular);
 	m_Dirty = true;
 }
-void ExampleLayer::Camera::OrbitAround (glm::vec2 _2d_dirn, glm::vec3 origin) {
+void MainLayer::Camera::OrbitAround (glm::vec2 _2d_dirn, glm::vec3 origin) {
 
 
 	glm::vec3 cam_dirn (glm::normalize (Position - origin));
@@ -372,7 +372,7 @@ void ExampleLayer::Camera::OrbitAround (glm::vec2 _2d_dirn, glm::vec3 origin) {
 
 	LookAt (origin);
 }
-glm::vec2 ExampleLayer::Camera::PitchYawFromDirn (glm::vec3 dirn)
+glm::vec2 MainLayer::Camera::PitchYawFromDirn (glm::vec3 dirn)
 {
 	float x = dirn.x;
 	float y = dirn.y;

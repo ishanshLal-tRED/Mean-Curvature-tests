@@ -4,13 +4,13 @@
 #include <GLCoreUtils.h>
 #include "base.h"
 
-class ExampleLayer : public SqrShader_Base
+class MainLayer : public SqrShader_Base
 {
 public:
-	ExampleLayer (const char* name = "ExampleLayer")
-		: SqrShader_Base (name, "just a base")
+	MainLayer (const char* name = "Mean_Curvature_Visualizer")
+		: SqrShader_Base (name, "Calculates Meancurvature over a mesh, then renders geometry onto the visualizer.\nThe color over the mesh is of the linear interpolation between min and max value of mean-curvature\nNote: Some discrepencies may arise while parsing the mesh, so the visualized results may vary.\n      (A custom parser is implimented, as it's a general practise for vertices to be duplicated while parsing, although in our case it actually messes up the calculations)")
 	{}
-	virtual ~ExampleLayer() = default;
+	virtual ~MainLayer() = default;
 
 	virtual void OnAttach() override;
 	virtual void OnDetach() override;

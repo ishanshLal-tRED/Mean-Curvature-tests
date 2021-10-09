@@ -1,6 +1,6 @@
 // sandbox.cpp : This file contains the 'main' function. Program execution begins and ends there.
 #include <GLCore.h>
-#include "ExampleLayer.h"
+#include "MainLayer.h"
 
 class MySandbox
 	: public GLCore::Application
@@ -9,7 +9,7 @@ public:
 	MySandbox ()
 		: GLCore::Application("Sandbox")
 	{
-		PushLayer<ExampleLayer> ();
+		PushLayer<MainLayer> ();
 	}
 };
 
