@@ -20,7 +20,8 @@ public:
 	virtual void ImGuiMenuOptions() override;
 	virtual void OnSquareShaderReload () override;
 private:
-	bool LoadModel (std::string filePath);
+	bool load_model (std::string filePath);
+	void calculate_my_curvature ();
 public:
 	struct Camera
 	{
@@ -29,31 +30,35 @@ public:
 		void Dirtied () { m_Dirty = true; };
 		void Update ();
 
-		const glm::mat4 GetTransform ();
-		const glm::mat4& GetView ();
-		const glm::mat4& GetProjection ();
-		void ReCalculateProjection (float aspectRatio);
-		void LookAt (glm::vec3 positionInSpace);
-		void OrbitAround (glm::vec2 _2d_dirn_of_movement_over_imaginary_Sphere, glm::vec3 origin);
-		static glm::vec2 PitchYawFromDirn (glm::vec3 dirn);
+		const glm::mat4  GetTransform          ();
+		const glm::mat4  GetView               ();
+		const glm::mat4& GetProjection         ();
+		void             ReCalculateProjection (float aspectRatio);
+		void             LookAt                (glm::vec3 positionInSpace);
+		void             OrbitAround           (glm::vec2 _2d_dirn_of_movement_over_imaginary_Sphere, glm::vec3 origin);
+		static glm::vec2 PitchYawFromDirn      (glm::vec3 dirn);
+
+		const glm::vec3 Front () { return - *(glm::vec3 *)(&m_RotationMatrix[2]); } // Z-axis, negate as camera
+		const glm::vec3 Up    () { return   *(glm::vec3 *)(&m_RotationMatrix[1]); }
+		const glm::vec3 Right () { return   *(glm::vec3 *)(&m_RotationMatrix[0]); }
 	private:
 		void re_calculate_transform ();
-	
 	private: 
 		bool m_Dirty = true;
 	public:
 		// Transform
-		glm::vec3 Position = { -68.5f, -47.7f, -63.4f };
+		glm::vec3 Position = { 0, 0, 16 };
 		glm::vec3 Rotation = {0,0,0};
 		// Properties
 		float FOV_y = 45.0f; // in degrees
-		float Near = 0.1f; // in degrees
-		float Far = 1000.0f; // in degrees
+		float Near  = 0.1f;
+		float Far   = 1000.0f;
 	private:
 		glm::mat4 m_Projection;
 		glm::mat4 m_RotationMatrix; // ortho-graphic
 	};
 private:
+	bool m_DebugOutput = false;
 	Camera m_Camera;
 	
 	GLuint m_MeshVA = 0, m_MeshSVB = 0, m_MeshCVB = 0, m_MeshIB = 0;
@@ -82,5 +87,7 @@ private:
 												glm::vec3{1.0f,0,0}
 	};
 	glm::vec2 m_LastMousePosns = { 0,0 };
+	glm::vec2 m_MinMaxMeanCurvature = { 0,0 };
+
 	std::string m_LoadedMeshPath = "";
 };
