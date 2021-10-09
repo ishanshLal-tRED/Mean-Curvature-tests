@@ -17,7 +17,7 @@ namespace GLCore
 
 		const std::string &GetDiscription () { return m_TestDiscription; }
 	protected:
-		enum Flags
+		enum Flags : int
 		{
 			None = 0,
 			Viewport_Focused = BIT (0),
@@ -27,13 +27,14 @@ namespace GLCore
 		{
 			return m_Flags & flags;
 		}
-		glm::vec2 ViewportSize () { return m_ViewPortSize; }
+		constexpr glm::vec2 This_ViewportSize () { return m_ViewPortSize; }
+		constexpr float This_ViewportAspectRatio () { return m_ViewPortSize.x/m_ViewPortSize.y; }
 		// Relative to window
-		glm::vec2 ViewportPosition () { m_ViewportPosnRelativeToMain; };
+		constexpr glm::vec2 This_ViewportPosition () { return m_ViewportPosnRelativeToMain; };
 	private:
 		void FlagSetter (Flags, bool);
 		void FilteredEvent (Event &event);
-		bool ViewportSize (float x, float y);
+		bool This_ViewportSize (float x, float y);
 		friend class TestsLayerManager;
 	private:
 		static glm::vec2 s_MainViewportPosn;
