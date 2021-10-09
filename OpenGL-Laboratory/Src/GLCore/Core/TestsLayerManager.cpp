@@ -193,7 +193,7 @@ namespace GLCore
 						test->FlagSetter (TestBase::Viewport_Focused, ImGui::IsWindowFocused ());
 						test->FlagSetter (TestBase::Viewport_Hovered, ImGui::IsWindowHovered ());
 
-						if (test->ViewportSize (ContentRegionAvail.x, ContentRegionAvail.y)) {
+						if (test->This_ViewportSize (ContentRegionAvail.x, ContentRegionAvail.y)) {
 							m_ActiveTestFramebuffers[test_index]->Resize ((uint32_t)test->m_ViewPortSize.x, (uint32_t)test->m_ViewPortSize.y);
 						}
 						test->m_ViewportPosnRelativeToMain.x = ContentDrawStartPos.x - TestBase::s_MainViewportPosn.x;

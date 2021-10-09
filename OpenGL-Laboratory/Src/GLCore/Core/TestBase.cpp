@@ -74,7 +74,7 @@ namespace GLCore
 		}
 	}
 
-	bool TestBase::ViewportSize (float x, float y)
+	bool TestBase::This_ViewportSize (float x, float y)
 	{
 		if (m_ViewPortSize.x != x || m_ViewPortSize.y != y)
 		{

@@ -774,7 +774,7 @@ namespace Helper
 							 ,std::vector<uint32_t> &out_vertexIndices, std::vector<uint32_t> &out_uvIndices, std::vector<uint32_t> &out_normalIndices
 		)
 		{
-			printf ("Loading OBJ file %s...\n", path);
+			LOG_TRACE ("Loading OBJ file %s...\n", path);
 
 			out_vertexIndices.clear (), out_uvIndices.clear (), out_normalIndices.clear ();
 			out_vertices.clear (), out_uvs.clear (), out_normals.clear ();
@@ -782,8 +782,7 @@ namespace Helper
 
 			FILE *file = fopen (path, "r");
 			if (file == NULL) {
-				printf ("Cannot open file !\n");
-				getchar ();
+				LOG_ERROR ("Cannot open file !\n");
 				return false;
 			}
 
@@ -815,7 +814,7 @@ namespace Helper
 					uint32_t vertexIndex[3], uvIndex[3], normalIndex[3];
 					int matches = fscanf (file, "%d/%d/%d %d/%d/%d %d/%d/%d\n", &vertexIndex[0], &uvIndex[0], &normalIndex[0], &vertexIndex[1], &uvIndex[1], &normalIndex[1], &vertexIndex[2], &uvIndex[2], &normalIndex[2]);
 					if (matches != 9) {
-						printf ("provided file is a Complex OBJ, try triangulating all faces\n");
+						LOG_ERROR ("provided file is a Complex OBJ, try triangulating all faces\n");
 						fclose (file);
 						return false;
 					}
@@ -834,8 +833,8 @@ namespace Helper
 					fgets (stupidBuffer, 1000, file);
 				}
 			}
-
 			fclose (file);
+			LOG_INFO ("OBJ File loaded");
 			return true;
 		}
 		bool LoadOBJ_meshOnly (const char *path, std::vector<std::pair<glm::vec3, glm::vec3>> &out_vertices, std::vector<uint32_t> &out_indices)
@@ -896,6 +895,7 @@ std::ostream &operator<<(std::ostream &cout, const glm::mat4 &matrix)
 	for (uint32_t i = 0; i < 4; i++) {
 		for (uint32_t j = 0; j < 4; j++) {
 			cout  << ' ' << std::setw (8) << matrix[i][j];
+
 		}
 		cout << '\n';
 	}

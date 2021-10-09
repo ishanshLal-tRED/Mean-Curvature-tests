@@ -6,6 +6,7 @@
 #include <mutex>
 #include <atomic>
 #include <condition_variable>
+#include <GLCore/Core/Input.h>
 using namespace GLCore;
 using namespace GLCore::Utils;
 
@@ -15,7 +16,11 @@ const char *ViewProjectionIdentifierInShader = "u_ViewProjectionMat4";
 const char *ModelMatrixIdentifierInShader = "u_ModelMat4";
 // Static data end
 
-bool MeanCurvatureCalculate (const char* debug_filename, const std::vector<std::pair<glm::vec3, glm::vec3>> &posn_and_normals, const std::vector<GLuint> &indices, std::vector<glm::vec3> &color, const bool displayOutput = true);
+bool MeanCurvatureCalculate (const char *debug_filename
+							 , const std::vector<std::pair<glm::vec3, glm::vec3>> &posn_and_normals, const std::vector<GLuint> &indices, std::vector<glm::vec3> &curvature_diffuse_color
+							 , std::vector<glm::vec3> &mean_curvature_normals, std::vector<float> &mean_curvature_values
+							 , const std::vector<glm::vec3> &blend_betweencolors
+							 , const bool trackOutput = true);
 
 bool ExampleLayer::LoadModel (std::string filePath){
 	std::vector<std::pair<glm::vec3, glm::vec3>> meshVertices;
@@ -99,8 +104,7 @@ void ExampleLayer::OnAttach()
 			LOG_ERROR ("Cannot Load Mesh");
 		} else m_LoadedMeshPath = std::move(temp);
 	}
-	m_Camera.ReCalculateTransform ();
-	m_Camera.ReCalculateProjection (1);
+	m_Camera.ReCalculateProjection (This_ViewportAspectRatio());
 }
 void ExampleLayer::OnDetach()
 {
@@ -117,6 +121,8 @@ void ExampleLayer::OnDetach()
 }
 void ExampleLayer::OnUpdate(Timestep ts)
 {
+	m_Camera.Update ();
+
 	glClearColor (0.1f, 0.1f, 0.1f, 1.0f);
 	glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -140,22 +146,19 @@ void ExampleLayer::OnImGuiRender()
 			
 			if(ImGui::DragFloat3 ("Cam Position", &m_Camera.Position[0]) ||
 			ImGui::DragFloat3 ("Cam Rotation", &m_Camera.Rotation[0]))
-				m_Camera.ReCalculateTransform ();
+				m_Camera.Dirtied ();
 			if(ImGui::DragFloat ("Near plane", &m_Camera.Near, 1.0, 0.01f) ||
 			ImGui::DragFloat ("Far  plane", &m_Camera.Far, 1.0, m_Camera.Near, 10000))
 				m_Camera.ReCalculateProjection (1);
-			//if(ImGui::Button ("CamUpdateTransform"))
-			//	m_Camera.ReCalculateTransform ();
-			//ImGui::SameLine ();
-			//if(ImGui::Button ("CamUpdateProjection"))
-			//	m_Camera.ReCalculateProjection (1);
-			//ImGui::Text ("Note:\n For some reason parsed models 1st mesh is the only one being loaded, this is 1st for me so probably a tiny mistake on my side.\nI'll Address the issue on a later date. :)");
-
+			
 			if (ImGui::Button ("Calculate mean curvature")) {
 				uint32_t i = m_LoadedMeshPath.size ();
 				while (i > 0 && m_LoadedMeshPath[i-1] == '/' && m_LoadedMeshPath[i-1] == '\\')
 					i--;
-				if (MeanCurvatureCalculate (&m_LoadedMeshPath[i], m_StaticMeshData, m_MeshIndicesData, m_MeshColorData, false) && m_MeshCVB) {
+				if (m_MeshCVB && MeanCurvatureCalculate (&m_LoadedMeshPath[i], m_StaticMeshData, m_MeshIndicesData, m_MeshColorData
+											, m_Result_MeanCurvatureNormal, m_Result_MeanCurvatureValue
+											, m_BlendKhToColors
+											, false)) {
 					glBindBuffer (GL_ARRAY_BUFFER, m_MeshCVB);
 					glBufferSubData (GL_ARRAY_BUFFER, 0, m_MeshColorData.size ()*sizeof (glm::vec3), m_MeshColorData.data ());
 				}
@@ -170,6 +173,8 @@ void ExampleLayer::OnImGuiRender()
 						m_LoadedMeshPath = std::move(temp);
 				}
 			}
+			if (ImGui::Button ("LookAt: {0.0.0}"))
+				m_Camera.LookAt ({ 0,0,0 });
 
 			ImGui::EndTabItem ();
 		}
@@ -188,7 +193,49 @@ void ExampleLayer::OnImGuiRender()
 void ExampleLayer::OnEvent(Event& event)
 {
 	EventDispatcher dispatcher(event);
+	dispatcher.Dispatch<LayerViewportResizeEvent> (
+		[&](LayerViewportResizeEvent &event) {
+			m_Camera.ReCalculateProjection (float (event.GetWidth ())/float (event.GetHeight ()));
+			return false;
+		});
+	dispatcher.Dispatch<LayerViewportLostFocusEvent> (
+		[&](LayerViewportLostFocusEvent &event) {
+			Application::Get ().GetWindow ().MouseCursor (true);
+			return false;
+		});
+	dispatcher.Dispatch<MouseButtonPressedEvent> (
+		[&](MouseButtonPressedEvent &event) {
+			Application::Get ().GetWindow ().MouseCursor (false);
+			m_LastMousePosns = *(glm::vec2*)((void*)(&Input::GetMousePosn ()));
+			return false;
+		});
+	dispatcher.Dispatch<MouseMovedEvent> (
+		[&](MouseMovedEvent &event) {
+			if (Input::IsMouseButtonPressed (Mouse::Button0)) {
+				glm::vec2 new_posn (event.GetX (), event.GetY ());
+				glm::vec2 delta = new_posn - m_LastMousePosns;
+				LOG_TRACE ("Delta mouse move: {0}, {1}", delta.x, delta.y);
 
+				m_Camera.OrbitAround (delta*0.01f, { 0,0,0 });
+				m_LastMousePosns = new_posn;
+			}
+			return true;
+		});
+	dispatcher.Dispatch<KeyPressedEvent> (
+		[&](KeyPressedEvent &event) {
+			switch(event.GetKeyCode ()){
+				case Key::D:
+					m_Camera.OrbitAround ({ 0.01f,0 }, { 0,0,0 }); break;
+				case Key::A:
+					m_Camera.OrbitAround ({ -0.01f,0 }, { 0,0,0 }); break;
+			}
+			return true;
+		});
+	dispatcher.Dispatch<MouseButtonReleasedEvent> (
+		[&](MouseButtonReleasedEvent &event) {
+			Application::Get ().GetWindow ().MouseCursor (true);
+			return false;
+		});
 }
 void ExampleLayer::ImGuiMenuOptions ()
 {
@@ -207,7 +254,13 @@ void ExampleLayer::OnSquareShaderReload ()
 
 /////////////////
 // Camera
-
+void ExampleLayer::Camera::Update ()
+{
+	if (m_Dirty) {
+		re_calculate_transform ();
+	}
+	m_Dirty = false;
+}
 const glm::mat4 ExampleLayer::Camera::GetTransform ()
 {
 	glm::mat4 matrix = m_RotationMatrix;
@@ -219,9 +272,8 @@ const glm::mat4 ExampleLayer::Camera::GetTransform ()
 const glm::mat4 &ExampleLayer::Camera::GetView ()
 {
 	glm::mat4 matrix = glm::transpose (m_RotationMatrix); // orthogonal
-	for (uint16_t i = 0; i < 3; i++) {
-		matrix[3][i] = -Position[i]; // inverted translation
-	}
+	matrix = glm::translate (matrix, -Position);
+	//matrix = glm::inverse (GetTransform ());
 	return matrix;
 }
 const glm::mat4 &ExampleLayer::Camera::GetProjection ()
@@ -232,7 +284,7 @@ void ExampleLayer::Camera::ReCalculateProjection (float aspectRatio)
 {
 	m_Projection = glm::perspective (glm::radians (FOV_y), aspectRatio, Near, Far);
 }
-void ExampleLayer::Camera::ReCalculateTransform ()
+void ExampleLayer::Camera::re_calculate_transform ()
 {
 	m_RotationMatrix =
 		glm::rotate (
@@ -245,30 +297,55 @@ void ExampleLayer::Camera::ReCalculateTransform ()
 }
 void ExampleLayer::Camera::LookAt (glm::vec3 positionInSpace)
 {
+	LOG_TRACE ("LookAt");
 	glm::vec3 dirn (glm::normalize (positionInSpace - Position));
-	glm::vec2 angl = glm::radians (PitchYawFromDirn (dirn *= -1.0f));//Inverting The Model Matrix Flipped the dirn of forward, so flipping the dirn to the trouble of flipping pitch yaw
+	glm::vec2 angl = PitchYawFromDirn (-dirn); //Inverting The Model Matrix Flipps the dirn of forward, so flipping the dirn to the trouble of flipping pitch yaw
 	glm::vec3 eular (angl.x, angl.y, 0);
-	Rotation = eular;
+	Rotation = glm::degrees(eular);
+	m_Dirty = true;
+}
+void ExampleLayer::Camera::OrbitAround (glm::vec2 _2d_dirn, glm::vec3 origin) {
+
+	glm::vec3 cam_dirn (glm::normalize (Position - origin));
+	float radius = glm::length (origin - Position); // of imaginary sphere;
+	constexpr glm::vec3 world_up = { 0,1,0 };
+	glm::vec3 right = glm::cross (cam_dirn, world_up); // X
+	glm::vec3 up = glm::cross (right, cam_dirn); // Y
+
+	right *= _2d_dirn.x*radius; // circumpherence is 2pi*r
+	up *= _2d_dirn.y*radius;
+
+	Position += (right + up);
+
+	Position = (glm::normalize (Position-origin))*radius + origin;
+
+	LookAt (origin);// {-68.5 -47.7 -63.4}
 }
 glm::vec2 ExampleLayer::Camera::PitchYawFromDirn (glm::vec3 dirn)
 {
 	float x = dirn.x;
 	float y = dirn.y;
 	float z = dirn.z;
-	float xz = sqrt (x * x + z * z);//length of projection in xz plane
-	float xyz = 1.0f;//i.e sqrt(y*y + xz*xz);//length of dirn
+	float xz = sqrt (x*x + z*z);//length of projection in xz plane
+	float xyz = sqrt(y*y + xz*xz);//length of dirn
 
-	float yaw = glm::degrees (asin (x / xz));
-	float pitch = glm::degrees (asin (y / xyz));
+	float pitch = -asin (y / xyz);
+	float yaw = acos (z / xz);
 	//front is  0, 0, 1;
-	if (dirn.z < 0)
-		yaw = 180 - yaw;
+	if (dirn.x < 0)
+		yaw = -yaw;
+
+	std::cout << "Dirn: " << dirn << '\n';
 
 	//negating pitch --\/ as pitch is clockwise rotation while eular rotation is counter-Clockwise
-	return dirn;
+	return { pitch,yaw };
 }
 
-bool MeanCurvatureCalculate (const char* debug_filename, const std::vector<std::pair<glm::vec3, glm::vec3>> &posn_and_normals, const std::vector<GLuint> &indices, std::vector<glm::vec3> &curvature_diffuse_color, const bool trackOutput)
+bool MeanCurvatureCalculate (const char* debug_filename
+							 ,const std::vector<std::pair<glm::vec3, glm::vec3>> &posn_and_normals, const std::vector<GLuint> &indices, std::vector<glm::vec3> &curvature_diffuse_color
+							 ,std::vector<glm::vec3> &mean_curvature_normals, std::vector<float> &mean_curvature_values
+							 ,const std::vector<glm::vec3> &blend_betweencolors
+							 ,const bool trackOutput)
 {
 	float max_curvature = -std::numeric_limits<float>::max ();
 	float min_curvature =  std::numeric_limits<float>::max ();
@@ -329,7 +406,12 @@ bool MeanCurvatureCalculate (const char* debug_filename, const std::vector<std::
 							indices_of_neighbouring_vertives.push_back (indices[grp + ((i_mod_3 + 2)%3)]); // for anticlockwise iteration
 						}
 					}
-					if (indices_of_neighbouring_vertives.empty ()) continue;
+					//LOG_ASSERT (indices_of_neighbouring_vertives.empty ());
+					if (indices_of_neighbouring_vertives.empty ()) {
+						glm::vec3 vec = posn_and_normals[curr_indice].first;
+						LOG_WARN ("vertice with empty ring: {3}, [{0}, {1}, {2}]", vec.x, vec.y, vec.z, curr_indice);
+						continue;
+					}
 
 					ring.push_back (indices_of_neighbouring_vertives[0]);
 					ring.push_back (indices_of_neighbouring_vertives[1]);
@@ -424,15 +506,16 @@ bool MeanCurvatureCalculate (const char* debug_filename, const std::vector<std::
 				out_stream << "A_mixed: " << A_mixed;
 			#endif
 			}
+			float K_h = glm::length (K_Xi)*0.5;
+
 			mutex_curvature_push.lock ();
 			array_K_Xi[curr_indice] = K_Xi;
-			float K_h = glm::length (K_Xi)*0.5;
 			array_K_h[curr_indice] = K_h;
 			max_curvature = MAX (K_h, max_curvature);
 			min_curvature = MIN (K_h, min_curvature);
+			mutex_curvature_push.unlock ();
 			if (trackOutput)
 				cout_stream << K_h << ' ' << K_Xi << '\n';
-			mutex_curvature_push.unlock ();
 
 		#if MODE_DEBUG
 			out_stream << " mean_curvature: " << K_h << " K(Xi) " << K_Xi << "\ncurrvertex: " << posn_and_normals[curr_indice].first << " normal: " << posn_and_normals[curr_indice].second << '\n';
@@ -464,13 +547,11 @@ bool MeanCurvatureCalculate (const char* debug_filename, const std::vector<std::
 		ofs << out_stream.str ();
 		mutex_ofs.unlock ();
 	#endif
-		//mutex_cout.lock ();
-		//mutex_cout.unlock ();
 		
 		//for (size_t i = start; i < array_K_Xi.size (); i += stride) {
 		//	curvature_diffuse_color[i] = -glm::normalize(array_K_Xi[i]);
 		//}
-		auto blend = [](float ratio, std::array<glm::vec3, 7> blend_between) -> glm::vec3 {
+		auto blend = [](float ratio, const std::vector<glm::vec3> &blend_between) -> glm::vec3 {
 			ratio *= (blend_between.size () - 1);
 			float low_contri = std::floor (ratio);
 			float high_contri = std::ceil (ratio);
@@ -479,19 +560,11 @@ bool MeanCurvatureCalculate (const char* debug_filename, const std::vector<std::
 			return low_contri*blend_between[low] + high_contri*blend_between[high];
 		};
 		for (size_t i = start; i < array_K_Xi.size (); i += stride) {
-			float curvature = array_K_h[i];
-			curvature -= min_curvature;
-			curvature /= min_max_curvature_diff;
+			float ratio = array_K_h[i];
+			ratio -= min_curvature;
+			ratio /= min_max_curvature_diff;
 
-			curvature_diffuse_color[i] = blend (curvature, {
-												glm::vec3{0,0,85},
-												glm::vec3{0.0f,0.15f,0.65f},
-												glm::vec3{0.15f,0.25f,0.55f},
-												glm::vec3{0.15f,0.55f,0.05f},
-												glm::vec3{0.65f,0.35f,0},
-												glm::vec3{0.85f,0.15f,0},
-												glm::vec3{1.0f,0,0}
-												});
+			curvature_diffuse_color[i] = blend (ratio, blend_betweencolors);
 		};
 	};
 #define USE_MT 1
@@ -509,5 +582,7 @@ bool MeanCurvatureCalculate (const char* debug_filename, const std::vector<std::
 #if MODE_DEBUG
 	ofs.close ();
 #endif
+	mean_curvature_normals = std::move (array_K_Xi), mean_curvature_values = std::move (array_K_h);
+
 	return true;
 }
