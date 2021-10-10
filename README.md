@@ -37,7 +37,7 @@ cd Mean-Curvature-tests
 
 1. Build the project
 ```bash
-call Setup-Windows.lnk
+call Setup-Windows.bat
 ```
 It'll copy the necessarry files, and set-them up for ya.
 Open the solution `Assignment.sln` and build it as normal.
