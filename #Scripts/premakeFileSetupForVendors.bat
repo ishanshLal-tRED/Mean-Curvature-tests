@@ -3,7 +3,7 @@ pushd ..\
 
 set premakeFilesLocation=.\#Scripts\premakeFilesForVendors\
 set vendorProjectsLoc=.\~vendor\
-set vendorProjectsWithPremake=(imgui glfw)
+set vendorProjectsWithPremake=(imgui glfw glad-OpenGL_4.4)
 set files=(premake5.lua)
 set user_selecting_option=0
 :: Auto-select Option
