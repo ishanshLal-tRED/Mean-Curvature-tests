@@ -5,8 +5,8 @@ This is my exercise on Mean curvature, based on paper
 Discrete Differential-Geometry Operators for Triangulated 2-Manifolds
 by Mark Meyer, Mathieu Desbrun, Peter Schr¨oder, and Alan H. Barr1
 ```
-![image](https://user-images.githubusercontent.com/61790879/136651255-be3ad3a3-4fff-4bce-ade6-c0fa98047e47.png)
-![image](https://user-images.githubusercontent.com/61790879/136651373-e18c294e-b911-4d25-a7ee-cb63c2f225a6.png)
+![image]()
+![image](./Sandbox/torus.obj.png)
 (i know it looks awful, but its actually correct (calculations are correct though))
 # 2. How to use
 

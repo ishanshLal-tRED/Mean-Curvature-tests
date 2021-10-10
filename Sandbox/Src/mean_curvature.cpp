@@ -120,10 +120,9 @@ bool MeanCurvatureCalculate (const char *debug_filename
 
 
 			#if MODE_DEBUG
-				out_stream << "RING: ";
+				out_stream << "RING[i] {index, coordinate}:\n";
 				for (auto val : ring)
-					out_stream << std::setw (5) << val << ' ';
-				out_stream << '\n';
+					out_stream << ' ' << '{' << std::setw (5) << val << ' ' << posn_and_normals[val].first << '}' << '\n';
 			#endif
 
 				auto angle_between_edges = [&](uint32_t curr_vertex_index, uint32_t other1_vertex_index, uint32_t other2_vertex_index) -> float {
@@ -138,6 +137,7 @@ bool MeanCurvatureCalculate (const char *debug_filename
 				//     /  \
 				//   Q/____\R
 				float A_mixed = 0;
+			
 				glm::vec3 sigma_mean_curvature_normal_operator = glm::vec3 (0);
 				for (uint32_t i = 1; i < ring.size (); i++) {
 					float Q = angle_between_edges (ring[i-1], ring[i], curr_indice)
@@ -146,26 +146,44 @@ bool MeanCurvatureCalculate (const char *debug_filename
 					float pXR2, pXQ2, cot_Q, cot_R;
 					glm::vec3 XR_diff, XQ_diff;
 					{
-						XR_diff = posn_and_normals[curr_indice].first - posn_and_normals[ring[i-1]].first;
-						XQ_diff = posn_and_normals[curr_indice].first - posn_and_normals[ring[i]].first;
+						XQ_diff = posn_and_normals[curr_indice].first - posn_and_normals[ring[i-1]].first;
+						XR_diff = posn_and_normals[curr_indice].first - posn_and_normals[ring[i]].first;
 						cot_Q = cotf (Q), cot_R = cotf (R);
 						pXR2 = glm::length2 (XR_diff), pXQ2 = glm::length2 (XQ_diff), cot_Q, cot_R;
 					}
 
 					if (Q < glm::half_pi<float> () && R < glm::half_pi<float> () && X < glm::half_pi<float> ()) { // Acute △
+						
 						float A_voronoi = (pXR2*cot_Q + pXQ2*cot_R)*0.125; // (1/8)*((X-R)^2 * cotf(∠Q)  +  (X-Q)^2 * cotf(∠R))
+						
 						A_mixed += A_voronoi;
+
+						glm::vec3 mean_curvature_normal_operator_for_curr_tri
+							= cot_Q*XR_diff +  cot_R*XQ_diff;
+
+					#if MODE_DEBUG
+						out_stream << "{Q,R}[" << Q <<' '<< R << "] vor:" << A_voronoi << '\n';
+					#endif
+						
+						sigma_mean_curvature_normal_operator += mean_curvature_normal_operator_for_curr_tri;
+					
 					} else {
 						float Area_T = (pXR2*cot_Q/sqr (sinf (R)) + pXQ2*cot_R/sqr (sinf (Q)))*0.5;
-						if (X >= glm::half_pi<float> ())
-							A_mixed += Area_T*0.5;
-						else
-							A_mixed += Area_T*0.25;
+						if (X >= glm::half_pi<float> ()) {
+							float val = Area_T*0.5;
+							A_mixed += val;
+						#if MODE_DEBUG
+							out_stream << "T/2:" << val << '\n';
+						#endif
+						} else {
+							float val = Area_T*0.25;
+							A_mixed += val;
+						#if MODE_DEBUG
+							out_stream << "T/4:" << val << '\n';
+						#endif
+						}
 					}
 
-					glm::vec3 mean_curvature_normal_operator_for_curr_tri
-						= cot_Q*XR_diff +  cot_R*XQ_diff;
-					sigma_mean_curvature_normal_operator += mean_curvature_normal_operator_for_curr_tri;
 				}
 				K_Xi = (sigma_mean_curvature_normal_operator)*float (1.0/(2.0*A_mixed));
 
