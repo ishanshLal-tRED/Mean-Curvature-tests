@@ -80,10 +80,16 @@ bool MainLayer::load_model (std::string filePath){
 }
 void MainLayer::calculate_my_curvature ()
 {
-	uint32_t i = m_LoadedMeshPath.size ();
-	while (i > 0 && m_LoadedMeshPath[i-1] == '/' && m_LoadedMeshPath[i-1] == '\\')
-		i--;
-	if (m_MeshCVB && MeanCurvatureCalculate (&m_LoadedMeshPath[i], m_StaticMeshData, m_MeshIndicesData, m_MeshColorData
+	auto debugFile = std::string ();
+#if MODE_DEBUG
+	{
+		uint32_t i = m_LoadedMeshPath.size ();
+		while (i > 0 && m_LoadedMeshPath[i-1] != '/' && m_LoadedMeshPath[i-1] != '\\')
+			i--;
+		debugFile = std::string (&m_LoadedMeshPath[i]) + std::string (".txt");
+	}
+#endif
+	if (m_MeshCVB && MeanCurvatureCalculate (debugFile.c_str (), m_StaticMeshData, m_MeshIndicesData, m_MeshColorData
 											 , m_Result_MeanCurvatureNormal, m_Result_MeanCurvatureValue
 											 , m_BlendKhToColors
 											 , m_DebugOutput, &m_MinMaxMeanCurvature.x, &m_MinMaxMeanCurvature.y)) {
@@ -251,7 +257,7 @@ void MainLayer::OnEvent(Event& event)
 			if (Input::IsMouseButtonPressed (Mouse::Button0)) {
 				glm::vec2 new_posn (event.GetX (), event.GetY ());
 				glm::vec2 delta = new_posn - m_LastMousePosns;
-				LOG_TRACE ("Delta mouse move: {0}, {1}", delta.x, delta.y);
+				//LOG_TRACE ("Delta mouse move: {0}, {1}", delta.x, delta.y);
 
 				m_Camera.OrbitAround (delta*0.01f, { 0,0,0 });
 				m_LastMousePosns = new_posn;
